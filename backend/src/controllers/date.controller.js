@@ -1,0 +1,257 @@
+const DateRequest = require('../models/DateRequest');
+const Notification = require('../models/Notification');
+const User = require('../models/User');
+const { validateDateTime } = require('../utils/validators');
+
+// @desc    Create a date request
+// @route   POST /api/dates/request
+// @access  Private
+exports.createDateRequest = async (req, res, next) => {
+  try {
+    const { receiverId, preferredDate, preferredTime, location, customLocation, message } = req.body;
+
+    // Validation
+    if (!receiverId || !preferredDate || !preferredTime || !location) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide all required fields'
+      });
+    }
+
+    // Validate date and time
+    const validation = validateDateTime(preferredDate, preferredTime);
+    if (!validation.valid) {
+      return res.status(400).json({
+        success: false,
+        message: validation.error
+      });
+    }
+
+    // Check if receiver exists
+    const receiver = await User.findById(receiverId);
+    if (!receiver) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Check if trying to request date with self
+    if (receiverId === req.user._id.toString()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot request a date with yourself'
+      });
+    }
+
+    // Create date request
+    const dateRequest = new DateRequest({
+      requester: req.user._id,
+      receiver: receiverId,
+      preferredDate,
+      preferredTime,
+      location,
+      customLocation,
+      message
+    });
+
+    await dateRequest.save();
+    await dateRequest.populate('requester', 'firstName lastName profilePhoto');
+
+    // Create notification for receiver
+    const notification = new Notification({
+      user: receiverId,
+      type: 'date_request',
+      relatedUser: req.user._id,
+      relatedDateRequest: dateRequest._id,
+      title: `Date request from ${req.user.firstName}`,
+      message: `${req.user.firstName} requested a date with you`
+    });
+    await notification.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Date request sent successfully',
+      dateRequest
+    });
+  } catch (error) {
+    console.error('❌ Create date request error:', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating date request: ' + error.message
+    });
+  }
+};
+
+// @desc    Get pending date requests for current user
+// @route   GET /api/dates/requests
+// @access  Private
+exports.getPendingRequests = async (req, res, next) => {
+  try {
+    const requests = await DateRequest.find({
+      receiver: req.user._id,
+      status: 'pending'
+    })
+      .populate('requester', 'firstName lastName profilePhoto bio interests')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: requests.length,
+      requests
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching requests: ' + error.message
+    });
+  }
+};
+
+// @desc    Accept a date request
+// @route   PUT /api/dates/request/:id/accept
+// @access  Private
+exports.acceptDateRequest = async (req, res, next) => {
+  try {
+    const dateRequest = await DateRequest.findById(req.params.id);
+
+    if (!dateRequest) {
+      return res.status(404).json({
+        success: false,
+        message: 'Date request not found'
+      });
+    }
+
+    // Check if user is the receiver
+    if (dateRequest.receiver.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to accept this request'
+      });
+    }
+
+    // Check if request is still pending
+    if (dateRequest.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot accept a ${dateRequest.status} request`
+      });
+    }
+
+    // Update status
+    dateRequest.status = 'accepted';
+    dateRequest.responseDate = new Date();
+    await dateRequest.save();
+    await dateRequest.populate('requester', 'firstName lastName profilePhoto');
+
+    // Create notification for requester
+    const notification = new Notification({
+      user: dateRequest.requester,
+      type: 'date_accepted',
+      relatedUser: req.user._id,
+      relatedDateRequest: dateRequest._id,
+      title: `${req.user.firstName} accepted your date request`,
+      message: `${req.user.firstName} accepted your date request for ${dateRequest.preferredDate}`
+    });
+    await notification.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Date request accepted',
+      dateRequest
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error accepting request: ' + error.message
+    });
+  }
+};
+
+// @desc    Reject a date request
+// @route   PUT /api/dates/request/:id/reject
+// @access  Private
+exports.rejectDateRequest = async (req, res, next) => {
+  try {
+    const { message } = req.body;
+    const dateRequest = await DateRequest.findById(req.params.id);
+
+    if (!dateRequest) {
+      return res.status(404).json({
+        success: false,
+        message: 'Date request not found'
+      });
+    }
+
+    // Check if user is the receiver
+    if (dateRequest.receiver.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to reject this request'
+      });
+    }
+
+    // Check if request is still pending
+    if (dateRequest.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot reject a ${dateRequest.status} request`
+      });
+    }
+
+    // Update status
+    dateRequest.status = 'rejected';
+    dateRequest.responseDate = new Date();
+    dateRequest.responseMessage = message;
+    await dateRequest.save();
+
+    // Create notification for requester
+    const notification = new Notification({
+      user: dateRequest.requester,
+      type: 'date_rejected',
+      relatedUser: req.user._id,
+      relatedDateRequest: dateRequest._id,
+      title: `Date request declined`,
+      message: `${req.user.firstName} declined your date request`
+    });
+    await notification.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Date request rejected'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error rejecting request: ' + error.message
+    });
+  }
+};
+
+// @desc    Get all accepted dates for current user
+// @route   GET /api/dates/scheduled
+// @access  Private
+exports.getScheduledDates = async (req, res, next) => {
+  try {
+    const dates = await DateRequest.find({
+      $or: [
+        { requester: req.user._id, status: 'accepted' },
+        { receiver: req.user._id, status: 'accepted' }
+      ]
+    })
+      .populate('requester', 'firstName lastName profilePhoto')
+      .populate('receiver', 'firstName lastName profilePhoto')
+      .sort({ preferredDate: 1 });
+
+    res.status(200).json({
+      success: true,
+      count: dates.length,
+      dates
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching scheduled dates: ' + error.message
+    });
+  }
+};
