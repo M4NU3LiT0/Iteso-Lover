@@ -59,18 +59,26 @@ const userSchema = new mongoose.Schema(
     phoneNumber: {
       type: String,
       default: null,
-      match: [/^\+?[0-9]{10,}$/, 'Please provide a valid phone number']
+      match: [/^\+?\d{10,}$/, 'Please provide a valid phone number']
     },
     // Interests/Preferences
     interests: {
       type: [String],
-      enum: ['Sports', 'Music', 'Art', 'Technology', 'Travel', 'Food', 'Movies', 'Books', 'Gaming', 'Fashion', 'Science', 'Nature'],
+      enum: ['Deportes', 'Música', 'Arte', 'Tecnología', 'Viajes', 'Comida', 'Películas', 'Libros', 'Gaming', 'Moda', 'Ciencia', 'Naturaleza'],
       default: []
     },
     careerGoal: {
       type: String,
       maxlength: 200,
       default: ''
+    },
+    // Preferences
+    preferences: {
+      interestedIn: {
+        type: String,
+        enum: ['male', 'female', 'other', 'all'],
+        default: 'all'
+      }
     },
     // Status
     isActive: {
@@ -81,6 +89,11 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
+    role: {
+      type: String,
+      enum: ['user', 'admin'],
+      default: 'user'
+    },
     lastLogin: {
       type: Date,
       default: null
@@ -88,6 +101,23 @@ const userSchema = new mongoose.Schema(
     // Account Security
     resetPasswordToken: String,
     resetPasswordExpire: Date,
+    loginAttempts: {
+      type: Number,
+      default: 0
+    },
+    lockUntil: {
+      type: Date
+    },
+    refreshTokenVersion: {
+      type: Number,
+      default: 0,
+      select: false
+    },
+    // Social
+    blockedUsers: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }],
   },
   {
     timestamps: true
@@ -113,6 +143,27 @@ userSchema.pre('save', async function(next) {
 });
 
 // ============ METHODS ============
+
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+
+userSchema.methods.isLocked = function() {
+  return !!(this.lockUntil && this.lockUntil > Date.now());
+};
+
+userSchema.methods.incrementLoginAttempts = async function() {
+  if (this.lockUntil && this.lockUntil < Date.now()) {
+    return this.updateOne({
+      $set: { loginAttempts: 1 },
+      $unset: { lockUntil: 1 }
+    });
+  }
+  const updates = { $inc: { loginAttempts: 1 } };
+  if (this.loginAttempts + 1 >= MAX_LOGIN_ATTEMPTS && !this.isLocked()) {
+    updates.$set = { lockUntil: Date.now() + LOCK_DURATION_MS };
+  }
+  return this.updateOne(updates);
+};
 
 // Compare password
 userSchema.methods.matchPassword = async function(enteredPassword) {

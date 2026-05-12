@@ -29,7 +29,7 @@ const validateDateTime = (date, time) => {
     return { valid: false, error: 'Date must be in the future' };
   }
 
-  if (!/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time)) {
+  if (!/^([0-1]?\d|2[0-3]):[0-5]\d$/.test(time)) {
     return { valid: false, error: 'Invalid time format (HH:MM)' };
   }
 

@@ -1,45 +1,32 @@
-import create from 'zustand';
+import { create } from 'zustand';
 
-// Auth Store using Zustand
+// Tokens are stored in httpOnly cookies managed by the server.
+// Only the user object (non-sensitive) is kept in localStorage for UI state.
 const useAuthStore = create((set) => ({
   user: JSON.parse(localStorage.getItem('user')) || null,
-  accessToken: localStorage.getItem('accessToken') || null,
-  refreshToken: localStorage.getItem('refreshToken') || null,
   isLoading: false,
   error: null,
 
-  // Set user and tokens
-  setAuth: (user, accessToken, refreshToken) => {
+  setAuth: (user) => {
     localStorage.setItem('user', JSON.stringify(user));
-    localStorage.setItem('accessToken', accessToken);
-    localStorage.setItem('refreshToken', refreshToken);
-    set({ user, accessToken, refreshToken });
+    set({ user });
   },
 
-  // Clear auth
   logout: () => {
     localStorage.removeItem('user');
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    set({ user: null, accessToken: null, refreshToken: null });
+    set({ user: null });
   },
 
-  // Set loading
   setLoading: (isLoading) => set({ isLoading }),
-
-  // Set error
   setError: (error) => set({ error }),
 
-  // Update user profile
   updateUser: (updatedUser) => {
     localStorage.setItem('user', JSON.stringify(updatedUser));
     set({ user: updatedUser });
   },
 
-  // Check if user is authenticated
   isAuthenticated: () => {
-    const state = useAuthStore.getState();
-    return !!state.accessToken && !!state.user;
+    return !!useAuthStore.getState().user;
   }
 }));
 

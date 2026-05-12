@@ -1,136 +1,142 @@
 const User = require('../models/User');
+const { calculateCompatibility } = require('../utils/compatibility');
 
-// @desc    Get user profile
-// @route   GET /api/users/profile
-// @access  Private
-exports.getProfile = async (req, res, next) => {
+const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const SAFE_SELECT = '-password -resetPasswordToken -resetPasswordExpire -loginAttempts -lockUntil -refreshTokenVersion';
+
+// GET /api/users/profile
+exports.getProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
-
-    res.status(200).json({
-      success: true,
-      user: user.getPublicProfile()
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching profile: ' + error.message
-    });
+    return res.status(200).json({ success: true, user: user.getPublicProfile() });
+  } catch {
+    return res.status(500).json({ success: false, message: 'Error fetching profile' });
   }
 };
 
-// @desc    Update user profile
-// @route   PUT /api/users/profile
-// @access  Private
-exports.updateProfile = async (req, res, next) => {
+// PUT /api/users/profile
+exports.updateProfile = async (req, res) => {
   try {
-    const { firstName, lastName, bio, interests, careerGoal, phoneNumber } = req.body;
+    const { firstName, lastName, bio, interests, careerGoal, phoneNumber, preferences } = req.body;
 
-    // Fields that are allowed to be updated
     const allowedUpdates = {
       ...(firstName && { firstName }),
       ...(lastName && { lastName }),
-      ...(bio && { bio }),
+      ...(bio !== undefined && { bio }),
       ...(interests && { interests }),
-      ...(careerGoal && { careerGoal }),
-      ...(phoneNumber && { phoneNumber })
+      ...(careerGoal !== undefined && { careerGoal }),
+      ...(phoneNumber !== undefined && { phoneNumber }),
+      ...(preferences && { preferences })
     };
 
-    const user = await User.findByIdAndUpdate(
-      req.user._id,
-      allowedUpdates,
-      { new: true, runValidators: true }
-    );
+    const user = await User.findByIdAndUpdate(req.user._id, allowedUpdates, {
+      new: true,
+      runValidators: true
+    });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: 'Profile updated successfully',
       user: user.getPublicProfile()
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error updating profile: ' + error.message
-    });
+    return res.status(500).json({ success: false, message: 'Error updating profile' });
   }
 };
 
-// @desc    Search users by name, interests, and gender
-// @route   GET /api/users/search?q=name&interests=Sport,Music&gender=female
-// @access  Private
-exports.searchUsers = async (req, res, next) => {
+// GET /api/users/search?q=&interests=&gender=
+exports.searchUsers = async (req, res) => {
   try {
     const { q, interests, gender } = req.query;
-    let filter = { _id: { $ne: req.user._id } }; // Exclude current user
 
-    // Search by name
+    const currentUser = await User.findById(req.user._id).select('interests preferences blockedUsers gender');
+    const blockedIds = currentUser.blockedUsers || [];
+
+    let filter = { _id: { $ne: req.user._id, $nin: blockedIds }, isActive: true };
+
     if (q) {
+      const safe = escapeRegex(String(q).slice(0, 50));
       filter.$or = [
-        { firstName: { $regex: q, $options: 'i' } },
-        { lastName: { $regex: q, $options: 'i' } }
+        { firstName: { $regex: safe, $options: 'i' } },
+        { lastName: { $regex: safe, $options: 'i' } }
       ];
     }
 
-    // Filter by gender (if specified and not "all")
-    if (gender && gender !== 'all') {
-      filter.gender = gender;
-    }
+    if (gender && gender !== 'all') filter.gender = gender;
 
-    // Get base results
-    let users = await User.find(filter)
-      .select('-password -resetPasswordToken -resetPasswordExpire')
-      .limit(100);
+    let users = await User.find(filter).select(SAFE_SELECT).limit(50);
 
-    // If interests filter is specified, prioritize users with matching interests
-    if (interests) {
-      const interestArray = interests.split(',').map(i => i.trim());
-      
-      // Score users based on matching interests
-      users = users.map(user => {
-        const matchingInterests = user.interests.filter(i => interestArray.includes(i)).length;
-        return { ...user.toObject(), matchScore: matchingInterests };
+    // Compute compatibility score for every result
+    const interestFilter = interests
+      ? new Set(interests.split(',').map((i) => i.trim()).slice(0, 12))
+      : null;
+
+    users = users
+      .map((u) => {
+        const score = calculateCompatibility(currentUser, u);
+        const obj = { ...u.toObject(), compatibilityScore: score };
+        if (interestFilter) {
+          obj.matchScore = u.interests.filter((i) => interestFilter.has(i)).length;
+        }
+        return obj;
+      })
+      .sort((a, b) => {
+        // Sort by interest filter first if provided, otherwise by compatibility
+        if (interestFilter) return b.matchScore - a.matchScore || b.compatibilityScore - a.compatibilityScore;
+        return b.compatibilityScore - a.compatibilityScore;
       });
 
-      // Sort by matching interests (descending), then by those without matching interests
-      users.sort((a, b) => b.matchScore - a.matchScore);
-    }
-
-    res.status(200).json({
-      success: true,
-      count: users.length,
-      users
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error searching users: ' + error.message
-    });
+    return res.status(200).json({ success: true, count: users.length, users });
+  } catch {
+    return res.status(500).json({ success: false, message: 'Error searching users' });
   }
 };
 
-// @desc    Get user by ID (public profile)
-// @route   GET /api/users/:id
-// @access  Private
-exports.getUserById = async (req, res, next) => {
+// GET /api/users/compatible — top matches sorted by compatibility score
+exports.getCompatibleUsers = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id)
-      .select('-password -resetPasswordToken -resetPasswordExpire');
+    const currentUser = await User.findById(req.user._id).select(
+      'interests preferences blockedUsers gender'
+    );
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
+    const blockedIds = currentUser.blockedUsers || [];
 
-    res.status(200).json({
-      success: true,
-      user
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching user: ' + error.message
-    });
+    // Apply preference filter if set
+    const prefFilter =
+      currentUser.preferences?.interestedIn && currentUser.preferences.interestedIn !== 'all'
+        ? { gender: currentUser.preferences.interestedIn }
+        : {};
+
+    const candidates = await User.find({
+      _id: { $ne: req.user._id, $nin: blockedIds },
+      isActive: true,
+      ...prefFilter
+    })
+      .select(SAFE_SELECT)
+      .limit(100);
+
+    const scored = candidates
+      .map((u) => ({ ...u.toObject(), compatibilityScore: calculateCompatibility(currentUser, u) }))
+      .filter((u) => u.compatibilityScore > 0)
+      .sort((a, b) => b.compatibilityScore - a.compatibilityScore)
+      .slice(0, 20);
+
+    return res.status(200).json({ success: true, count: scored.length, users: scored });
+  } catch {
+    return res.status(500).json({ success: false, message: 'Error fetching compatible users' });
+  }
+};
+
+// GET /api/users/:id
+exports.getUserById = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select(
+      `${SAFE_SELECT} -blockedUsers`
+    );
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    return res.status(200).json({ success: true, user });
+  } catch {
+    return res.status(500).json({ success: false, message: 'Error fetching user' });
   }
 };

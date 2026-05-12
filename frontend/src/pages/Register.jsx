@@ -41,7 +41,7 @@ const Register = () => {
       );
 
       if (response.success) {
-        setAuth(response.user, response.tokens.accessToken, response.tokens.refreshToken);
+        setAuth(response.user);
         navigate('/dashboard');
       }
     } catch (err) {

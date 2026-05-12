@@ -30,7 +30,7 @@ const Login = () => {
       const response = await authServices.login(formData.email, formData.password);
       
       if (response.success) {
-        setAuth(response.user, response.tokens.accessToken, response.tokens.refreshToken);
+        setAuth(response.user);
         navigate('/dashboard');
       }
     } catch (err) {
@@ -86,7 +86,12 @@ const Login = () => {
           </button>
         </form>
 
-        <p className="text-center mt-4 text-gray-600">
+        <p className="text-center mt-3 text-gray-600">
+          <a href="/forgot-password" className="text-pink-400 text-sm hover:underline">
+            ¿Olvidaste tu contraseña?
+          </a>
+        </p>
+        <p className="text-center mt-2 text-gray-600">
           ¿No tienes cuenta?{' '}
           <a href="/register" className="text-pink-500 font-semibold hover:underline">
             Regístrate aquí

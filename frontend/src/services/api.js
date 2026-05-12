@@ -5,33 +5,73 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const apiClient = axios.create({
   baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json'
-  }
+  headers: { 'Content-Type': 'application/json' },
+  // Required so the browser sends httpOnly auth cookies and the CSRF cookie
+  withCredentials: true
 });
 
-// Add authorization header if token exists
+// Read CSRF token from the readable csrf_token cookie
+const CSRF_COOKIE_RE = /(?:^|;\s*)csrf_token=([^;]+)/;
+const getCsrfToken = () => {
+  const match = CSRF_COOKIE_RE.exec(document.cookie);
+  return match ? match[1] : null;
+};
+
+// Inject CSRF token header on all state-changing requests
 apiClient.interceptors.request.use(
   (config) => {
-    const { accessToken } = useAuthStore.getState();
-    if (accessToken) {
-      config.headers.Authorization = `Bearer ${accessToken}`;
+    const method = config.method?.toLowerCase();
+    if (['post', 'put', 'patch', 'delete'].includes(method)) {
+      const token = getCsrfToken();
+      if (token) config.headers['X-CSRF-Token'] = token;
     }
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// Handle response errors
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error) => {
+  failedQueue.forEach((p) => (error ? p.reject(error) : p.resolve()));
+  failedQueue = [];
+};
+
+// Handle 401 — attempt one silent token refresh before logging out
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Token expired or invalid - logout user
-      useAuthStore.getState().logout();
-      window.location.href = '/login';
+  async (error) => {
+    const original = error.config;
+
+    if (error.response?.status === 401 && !original._retry) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then(() => apiClient(original))
+          .catch((e) => { throw e; });
+      }
+
+      original._retry = true;
+      isRefreshing = true;
+
+      try {
+        // The refresh token is in an httpOnly cookie — no body needed
+        await axios.post(`${API_URL}/auth/refresh`, {}, { withCredentials: true });
+        processQueue(null);
+        return apiClient(original);
+      } catch (refreshError) {
+        processQueue(refreshError);
+        useAuthStore.getState().logout();
+        window.location.href = '/login';
+        throw refreshError;
+      } finally {
+        isRefreshing = false;
+      }
     }
-    return Promise.reject(error);
+
+    throw error;
   }
 );
 

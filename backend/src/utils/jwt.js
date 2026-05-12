@@ -1,44 +1,41 @@
 const jwt = require('jsonwebtoken');
 
-// Generate JWT Token
+const accessSecret = process.env.JWT_SECRET;
+const refreshSecret = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
+
 const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
+  return jwt.sign({ id }, accessSecret, {
     expiresIn: process.env.JWT_EXPIRE || '7d'
   });
 };
 
-// Generate Refresh Token
-const generateRefreshToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_REFRESH_SECRET, {
+// version is included so that token reuse can be detected during rotation
+const generateRefreshToken = (id, version = 0) => {
+  return jwt.sign({ id, version }, refreshSecret, {
     expiresIn: process.env.JWT_REFRESH_EXPIRE || '30d'
   });
 };
 
-// Verify JWT Token
 const verifyToken = (token) => {
   try {
-    return jwt.verify(token, process.env.JWT_SECRET);
-  } catch (error) {
+    return jwt.verify(token, accessSecret);
+  } catch {
     return null;
   }
 };
 
-// Verify Refresh Token
 const verifyRefreshToken = (token) => {
   try {
-    return jwt.verify(token, process.env.JWT_REFRESH_SECRET);
-  } catch (error) {
+    return jwt.verify(token, refreshSecret);
+  } catch {
     return null;
   }
 };
 
-// Generate tokens (both)
-const generateTokens = (id) => {
-  return {
-    accessToken: generateToken(id),
-    refreshToken: generateRefreshToken(id)
-  };
-};
+const generateTokens = (id, version = 0) => ({
+  accessToken: generateToken(id),
+  refreshToken: generateRefreshToken(id, version)
+});
 
 module.exports = {
   generateToken,
