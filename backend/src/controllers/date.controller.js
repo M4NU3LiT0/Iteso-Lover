@@ -44,6 +44,27 @@ exports.createDateRequest = async (req, res, next) => {
       });
     }
 
+    // Validate time is within allowed range (08:00 - 22:00)
+    const [hours] = preferredTime.split(':').map(Number);
+    if (hours < 8 || hours >= 22) {
+      return res.status(400).json({
+        success: false,
+        message: 'La hora debe estar entre las 8:00 y las 22:00'
+      });
+    }
+
+    // Anti-spam: max 5 pending outgoing requests
+    const pendingCount = await DateRequest.countDocuments({
+      requester: req.user._id,
+      status: 'pending'
+    });
+    if (pendingCount >= 5) {
+      return res.status(429).json({
+        success: false,
+        message: 'Tienes demasiadas solicitudes pendientes (máximo 5). Espera respuesta antes de enviar más.'
+      });
+    }
+
     // Create date request
     const dateRequest = new DateRequest({
       requester: req.user._id,
@@ -253,5 +274,58 @@ exports.getScheduledDates = async (req, res, next) => {
       success: false,
       message: 'Error fetching scheduled dates: ' + error.message
     });
+  }
+};
+
+// @desc    Cancel an accepted date (requester or receiver can cancel)
+// @route   PUT /api/dates/request/:id/cancel
+// @access  Private
+exports.cancelDate = async (req, res, next) => {
+  try {
+    const dateRequest = await DateRequest.findById(req.params.id);
+
+    if (!dateRequest) {
+      return res.status(404).json({ success: false, message: 'Cita no encontrada' });
+    }
+
+    const userId = req.user._id.toString();
+    const isParticipant =
+      dateRequest.requester.toString() === userId ||
+      dateRequest.receiver.toString() === userId;
+
+    if (!isParticipant) {
+      return res.status(403).json({ success: false, message: 'No autorizado para cancelar esta cita' });
+    }
+
+    if (dateRequest.status !== 'accepted') {
+      return res.status(400).json({
+        success: false,
+        message: `No se puede cancelar una cita con estado "${dateRequest.status}"`
+      });
+    }
+
+    dateRequest.status = 'cancelled';
+    dateRequest.responseDate = new Date();
+    await dateRequest.save();
+
+    // Notify the other participant
+    const otherUserId =
+      dateRequest.requester.toString() === userId
+        ? dateRequest.receiver
+        : dateRequest.requester;
+
+    const notification = new Notification({
+      user: otherUserId,
+      type: 'date_cancelled',
+      relatedUser: req.user._id,
+      relatedDateRequest: dateRequest._id,
+      title: 'Cita cancelada',
+      message: `${req.user.firstName} canceló la cita del ${dateRequest.preferredDate}`
+    });
+    await notification.save();
+
+    res.status(200).json({ success: true, message: 'Cita cancelada correctamente' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error al cancelar la cita: ' + error.message });
   }
 };

@@ -61,10 +61,24 @@ const userSchema = new mongoose.Schema(
       default: null,
       match: [/^\+?\d{10,}$/, 'Please provide a valid phone number']
     },
+    birthDate: {
+      type: Date,
+      default: null
+    },
+    careerName: {
+      type: String,
+      maxlength: 100,
+      default: ''
+    },
     // Interests/Preferences
     interests: {
       type: [String],
-      enum: ['Deportes', 'Música', 'Arte', 'Tecnología', 'Viajes', 'Comida', 'Películas', 'Libros', 'Gaming', 'Moda', 'Ciencia', 'Naturaleza'],
+      enum: [
+        'Deportes', 'Música', 'Arte', 'Tecnología', 'Viajes', 'Comida', 'Películas', 'Libros',
+        'Gaming', 'Moda', 'Ciencia', 'Naturaleza', 'Fotografía', 'Baile', 'Fitness', 'Yoga',
+        'Emprendimiento', 'Política', 'Cocina', 'Animales', 'Teatro', 'Idiomas', 'Voluntariado',
+        'Meditación', 'Astronomía'
+      ],
       default: []
     },
     careerGoal: {

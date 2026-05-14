@@ -4,7 +4,19 @@ import { userServices, uploadServices } from '../services/services';
 import useAuthStore from '../store/authStore';
 import apiClient from '../services/api';
 
-const INTERESTS = ['Deportes', 'Música', 'Arte', 'Tecnología', 'Viajes', 'Comida', 'Películas', 'Libros', 'Gaming', 'Moda', 'Ciencia', 'Naturaleza'];
+const INTERESTS = [
+  'Deportes', 'Música', 'Arte', 'Tecnología', 'Viajes', 'Comida', 'Películas', 'Libros',
+  'Gaming', 'Moda', 'Ciencia', 'Naturaleza', 'Fotografía', 'Baile', 'Fitness', 'Yoga',
+  'Emprendimiento', 'Política', 'Cocina', 'Animales', 'Teatro', 'Idiomas', 'Voluntariado',
+  'Meditación', 'Astronomía'
+];
+
+const CAREERS = [
+  'Ingeniería en Sistemas', 'Diseño Gráfico', 'Psicología', 'Administración de Empresas',
+  'Arquitectura', 'Relaciones Internacionales', 'Comunicación', 'Medicina',
+  'Ingeniería Ambiental', 'Derecho', 'Economía', 'Contaduría', 'Mercadotecnia',
+  'Ingeniería Industrial', 'Filosofía'
+];
 const PREFERENCE_OPTIONS = [
   { value: 'all', label: 'Todos' },
   { value: 'male', label: 'Hombres' },
@@ -30,7 +42,9 @@ const EditProfile = () => {
     bio: user?.bio || '',
     gender: user?.gender || '',
     interests: user?.interests || [],
+    careerName: user?.careerName || '',
     careerGoal: user?.careerGoal || '',
+    birthDate: user?.birthDate ? user.birthDate.split('T')[0] : '',
     phoneNumber: user?.phoneNumber || '',
     preferences: { interestedIn: user?.preferences?.interestedIn || 'all' }
   });
@@ -321,6 +335,22 @@ const EditProfile = () => {
                 <option value="male">Hombre</option>
                 <option value="female">Mujer</option>
                 <option value="other">Otro</option>
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="birthDate" className="block text-gray-700 font-semibold mb-1 text-sm">Fecha de nacimiento</label>
+              <input id="birthDate" type="date" name="birthDate" value={formData.birthDate} onChange={handleChange}
+                max={new Date().toISOString().split('T')[0]}
+                className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:border-pink-500" />
+            </div>
+
+            <div>
+              <label htmlFor="careerName" className="block text-gray-700 font-semibold mb-1 text-sm">Carrera</label>
+              <select id="careerName" name="careerName" value={formData.careerName} onChange={handleChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:border-pink-500">
+                <option value="">Seleccionar carrera</option>
+                {CAREERS.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
 

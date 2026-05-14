@@ -18,7 +18,7 @@ exports.getProfile = async (req, res) => {
 // PUT /api/users/profile
 exports.updateProfile = async (req, res) => {
   try {
-    const { firstName, lastName, bio, interests, careerGoal, phoneNumber, preferences } = req.body;
+    const { firstName, lastName, bio, interests, careerGoal, careerName, birthDate, phoneNumber, preferences } = req.body;
 
     const allowedUpdates = {
       ...(firstName && { firstName }),
@@ -26,6 +26,8 @@ exports.updateProfile = async (req, res) => {
       ...(bio !== undefined && { bio }),
       ...(interests && { interests }),
       ...(careerGoal !== undefined && { careerGoal }),
+      ...(careerName !== undefined && { careerName }),
+      ...(birthDate !== undefined && { birthDate }),
       ...(phoneNumber !== undefined && { phoneNumber }),
       ...(preferences && { preferences })
     };
@@ -45,10 +47,10 @@ exports.updateProfile = async (req, res) => {
   }
 };
 
-// GET /api/users/search?q=&interests=&gender=
+// GET /api/users/search?q=&interests=&gender=&career=&minAge=&maxAge=
 exports.searchUsers = async (req, res) => {
   try {
-    const { q, interests, gender } = req.query;
+    const { q, interests, gender, career, minAge, maxAge } = req.query;
 
     const currentUser = await User.findById(req.user._id).select('interests preferences blockedUsers gender');
     const blockedIds = currentUser.blockedUsers || [];
@@ -59,17 +61,37 @@ exports.searchUsers = async (req, res) => {
       const safe = escapeRegex(String(q).slice(0, 50));
       filter.$or = [
         { firstName: { $regex: safe, $options: 'i' } },
-        { lastName: { $regex: safe, $options: 'i' } }
+        { lastName: { $regex: safe, $options: 'i' } },
+        { careerName: { $regex: safe, $options: 'i' } }
       ];
     }
 
     if (gender && gender !== 'all') filter.gender = gender;
 
+    if (career) {
+      const safeCareer = escapeRegex(String(career).slice(0, 100));
+      filter.careerName = { $regex: safeCareer, $options: 'i' };
+    }
+
+    if (minAge || maxAge) {
+      const today = new Date();
+      filter.birthDate = {};
+      if (minAge) {
+        const d = new Date(today);
+        d.setFullYear(d.getFullYear() - parseInt(minAge));
+        filter.birthDate.$lte = d;
+      }
+      if (maxAge) {
+        const d = new Date(today);
+        d.setFullYear(d.getFullYear() - parseInt(maxAge) - 1);
+        filter.birthDate.$gte = d;
+      }
+    }
+
     let users = await User.find(filter).select(SAFE_SELECT).limit(50);
 
-    // Compute compatibility score for every result
     const interestFilter = interests
-      ? new Set(interests.split(',').map((i) => i.trim()).slice(0, 12))
+      ? new Set(interests.split(',').map((i) => i.trim()).slice(0, 25))
       : null;
 
     users = users
@@ -82,7 +104,6 @@ exports.searchUsers = async (req, res) => {
         return obj;
       })
       .sort((a, b) => {
-        // Sort by interest filter first if provided, otherwise by compatibility
         if (interestFilter) return b.matchScore - a.matchScore || b.compatibilityScore - a.compatibilityScore;
         return b.compatibilityScore - a.compatibilityScore;
       });

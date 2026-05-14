@@ -55,12 +55,15 @@ export const userServices = {
     return response.data;
   },
 
-  searchUsers: async (query, interests, gender) => {
+  searchUsers: async (query, interests, gender, career, minAge, maxAge) => {
     const params = new URLSearchParams();
     if (query) params.append('q', query);
     if (interests) params.append('interests', interests);
     if (gender && gender !== 'all') params.append('gender', gender);
-    
+    if (career) params.append('career', career);
+    if (minAge) params.append('minAge', minAge);
+    if (maxAge) params.append('maxAge', maxAge);
+
     const response = await apiClient.get(`/users/search?${params.toString()}`);
     return response.data;
   },
@@ -108,6 +111,11 @@ export const dateServices = {
 
   getScheduledDates: async () => {
     const response = await apiClient.get('/dates/scheduled');
+    return response.data;
+  },
+
+  cancelDate: async (requestId) => {
+    const response = await apiClient.put(`/dates/request/${requestId}/cancel`);
     return response.data;
   }
 };

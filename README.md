@@ -2,34 +2,84 @@
 
 Plataforma de citas para estudiantes del ITESO. Solo correos `@iteso.mx`.
 
-## Correr localmente
+## Requisito único
 
-**Requisito único: tener Docker Desktop instalado y corriendo.**
+Tener **Docker Desktop** instalado y corriendo.
+
+---
+
+## Correr el proyecto
+
+### Paso 1 — Clonar
 
 ```bash
 git clone https://github.com/M4NU3LiT0/Iteso-Lover.git
 cd Iteso-Lover
+```
+
+### Paso 2 — Crear el archivo `.env` en la raíz
+
+Este archivo contiene las credenciales de AWS S3 para que funcione la subida de fotos.
+Pídelas a un compañero del equipo o al dueño del repo.
+
+```bash
+# Crear el archivo .env en la raíz del proyecto (mismo nivel que docker-compose.yml)
+# con el siguiente contenido:
+
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_S3_BUCKET_NAME=iteso-lover-dev
+AWS_S3_REGION=us-east-1
+```
+
+> Sin este archivo la app funciona (registro, login, mensajes, citas),
+> pero la subida de fotos de perfil y galería no estará disponible.
+
+### Paso 3 — Levantar
+
+```bash
 docker-compose up --build
 ```
 
-Listo. La app estará en **http://localhost:3000**
+La primera vez tarda ~3 minutos mientras construye las imágenes.
+Las siguientes veces: `docker-compose up` (sin `--build`).
 
-- El backend corre en `http://localhost:5000`
-- La base de datos (MongoDB) se levanta automáticamente
-- Los cambios en el código se reflejan sin reiniciar (hot-reload)
+**La app estará en http://localhost:3000**
 
 ---
 
-## Configuración opcional
+## Poblar la base de datos con perfiles de prueba
 
-El proyecto **no necesita ningún archivo `.env`** para correr en desarrollo.
-
-Si quieres habilitar la subida de fotos (requiere AWS S3) o cambiar los JWT secrets:
+Después de levantar el proyecto, en una segunda terminal:
 
 ```bash
-cp .env.example .env
-# editar .env con tus valores
-docker-compose up --build
+docker-compose exec backend npm run seed
+```
+
+Esto crea **10 perfiles de estudiantes** + **1 cuenta admin**.
+Contraseña para todos: `Test1234`
+
+| Email | Rol |
+|---|---|
+| sofia.ramirez@iteso.mx | Usuario |
+| carlos.mendoza@iteso.mx | Usuario |
+| valentina.torres@iteso.mx | Usuario |
+| ... (10 perfiles en total) | Usuario |
+| admin@iteso.mx | Admin |
+
+> El seed solo corre si la base de datos está vacía. Es seguro correrlo varias veces.
+
+---
+
+## Comandos útiles
+
+```bash
+docker-compose up --build     # Primera vez
+docker-compose up             # Veces siguientes
+docker-compose down           # Parar todo
+docker-compose down -v        # Parar y borrar base de datos
+docker-compose logs -f        # Ver logs en tiempo real
+docker-compose exec backend npm run seed  # Poblar BD con datos de prueba
 ```
 
 ---
@@ -40,49 +90,31 @@ docker-compose up --build
 |---|---|
 | Frontend | React 18 + Tailwind CSS + Zustand |
 | Backend | Node.js + Express + Socket.io |
-| Base de datos | MongoDB 6 + Mongoose |
+| Base de datos | MongoDB 6 |
 | Auth | JWT en httpOnly cookies |
-| Tiempo real | Socket.io |
 | Archivos | AWS S3 |
 | Contenedores | Docker + Docker Compose |
 
-## Rutas principales
+---
 
-```
-POST   /api/auth/register          Registro (@iteso.mx)
-POST   /api/auth/login             Login
-POST   /api/auth/logout            Logout
-POST   /api/auth/forgot-password   Solicitar reset de contraseña
-POST   /api/auth/reset-password/:token  Resetear contraseña
+## Funcionalidades
 
-GET    /api/users/profile          Mi perfil
-PUT    /api/users/profile          Actualizar perfil
-GET    /api/users/compatible       Usuarios compatibles (por algoritmo)
-GET    /api/users/search           Buscar usuarios
+| Módulo | Qué hace |
+|---|---|
+| Auth | Registro/login solo con `@iteso.mx`, JWT httpOnly, lockout tras 5 intentos |
+| Perfiles | Editar nombre, carrera, edad, intereses (25 categorías), foto y galería (S3) |
+| Descubrir | Swipe de perfiles con filtros por intereses, carrera y rango de edad |
+| Citas | Solicitar, aceptar/rechazar y cancelar citas; límite de 5 pendientes por usuario |
+| Mensajes | Chat en tiempo real con Socket.io |
+| Admin | Panel para ver usuarios, logs de seguridad y reportes |
 
-POST   /api/photos                 Subir foto a galería
-DELETE /api/photos/:id             Eliminar foto
-PUT    /api/photos/reorder         Reordenar galería
-
-POST   /api/dates/request          Solicitar cita
-PUT    /api/dates/request/:id/accept   Aceptar
-PUT    /api/dates/request/:id/reject   Rechazar
-
-GET    /api/messages/conversations Mis conversaciones
-GET    /api/messages/:userId       Conversación con usuario
-POST   /api/messages/send          Enviar mensaje
-
-POST   /api/users/:id/block        Bloquear usuario
-POST   /api/users/:id/report       Reportar usuario
-
-GET    /api/admin/stats            Estadísticas (admin)
-GET    /api/admin/users            Listar usuarios (admin)
-GET    /api/admin/security-logs    Logs de seguridad (admin)
-```
+---
 
 ## Seguridad implementada
 
-- JWT en httpOnly cookies (no localStorage)
+Se corrigieron **14 vulnerabilidades** clasificadas según **OWASP Top 10 2021** (A01–A09).
+
+- JWT en httpOnly cookies (sin localStorage)
 - Refresh token rotation con detección de reuso
 - CSRF protection (double-submit cookie)
 - Account lockout tras 5 intentos fallidos
@@ -90,5 +122,22 @@ GET    /api/admin/security-logs    Logs de seguridad (admin)
 - Prevención de NoSQL injection
 - Content Security Policy (Helmet)
 - Audit logging de eventos de seguridad
-- Rate limiting en API y Socket.io
+- Rate limiting en API y Socket.io (120 req/min)
 - Solo correos `@iteso.mx` pueden registrarse
+
+---
+
+## Formato de la API
+
+Todas las respuestas siguen el mismo esquema:
+
+```json
+{ "success": true,  "message": "Acción completada", "data": {} }
+{ "success": false, "message": "Descripción del error" }
+```
+
+Rutas protegidas requieren el middleware `protect`:
+
+```js
+router.get('/ruta', protect, controllerFn);
+```
