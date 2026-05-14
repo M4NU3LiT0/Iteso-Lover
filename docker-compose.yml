@@ -1,16 +1,14 @@
 services:
   mongodb:
-    image: mongo:5
+    image: mongo:6
     container_name: iteso-lover-db
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
     ports:
       - "27017:27017"
     volumes:
       - mongodb_data:/data/db
     networks:
       - iteso-network
+    restart: unless-stopped
 
   backend:
     build:
@@ -18,24 +16,27 @@ services:
       dockerfile: Dockerfile.backend
     container_name: iteso-lover-backend
     environment:
-      - MONGODB_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/iteso-lover?authSource=admin
-      - NODE_ENV=production
+      - NODE_ENV=development
       - PORT=5000
-      - JWT_SECRET=${JWT_SECRET}
-      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
-      - FRONTEND_URL=${FRONTEND_URL}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME}
-      - AWS_S3_REGION=${AWS_S3_REGION}
+      - MONGODB_URI=mongodb://mongodb:27017/iteso-lover
+      # Secrets de desarrollo — cambiar en producción
+      - JWT_SECRET=${JWT_SECRET:-dev_jwt_secret_inseguro_cambiar_en_produccion_64chars}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-dev_refresh_secret_inseguro_cambiar_en_produccion_64}
+      - FRONTEND_URL=http://localhost:3000
+      # AWS S3 — solo necesario para subir fotos (opcional en dev)
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME:-}
+      - AWS_S3_REGION=${AWS_S3_REGION:-us-east-1}
     ports:
       - "5000:5000"
     depends_on:
       - mongodb
-    networks:
-      - iteso-network
     volumes:
       - ./backend/src:/app/backend/src
+    networks:
+      - iteso-network
+    restart: unless-stopped
 
   frontend:
     build:
@@ -43,14 +44,21 @@ services:
       dockerfile: Dockerfile.frontend
     container_name: iteso-lover-frontend
     environment:
-      - REACT_APP_API_URL=${REACT_APP_API_URL}
-      - REACT_APP_SOCKET_URL=${REACT_APP_SOCKET_URL}
+      - REACT_APP_API_URL=http://localhost:5000/api
+      - BROWSER=none
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
     ports:
       - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/frontend/src
+      - ./frontend/public:/app/frontend/public
     depends_on:
       - backend
     networks:
       - iteso-network
+    stdin_open: true
+    tty: true
 
 volumes:
   mongodb_data:
