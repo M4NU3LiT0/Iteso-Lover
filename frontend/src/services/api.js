@@ -1,7 +1,7 @@
 import axios from 'axios';
 import useAuthStore from '../store/authStore';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_URL = '/api';
 
 const apiClient = axios.create({
   baseURL: API_URL,
@@ -39,12 +39,14 @@ const processQueue = (error) => {
 };
 
 // Handle 401 — attempt one silent token refresh before logging out
+// BUT: don't intercept auth endpoints (they return 401 for invalid credentials, not expired tokens)
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const original = error.config;
+    const isAuthEndpoint = original.url?.includes('/auth/login') || original.url?.includes('/auth/register');
 
-    if (error.response?.status === 401 && !original._retry) {
+    if (error.response?.status === 401 && !original._retry && !isAuthEndpoint) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });

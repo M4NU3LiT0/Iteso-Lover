@@ -13,7 +13,6 @@ import RequestDate from './pages/RequestDate';
 import Messages from './pages/Messages';
 import AdminPanel from './pages/AdminPanel';
 import ProtectedRoute from './components/ProtectedRoute';
-import './styles/index.css';
 
 function App() {
   return (

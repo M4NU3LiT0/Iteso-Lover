@@ -60,15 +60,38 @@ const Discover = () => {
     setStatusMsg('');
     try {
       const interestsParam = activeFilters.interests.join(',');
-      const response = await userServices.searchUsers(
-        '',
-        interestsParam,
-        'all',
-        activeFilters.career,
-        activeFilters.minAge,
-        activeFilters.maxAge
-      );
-      setUsers(response.users || []);
+      // Use getCompatibleUsers to respect user gender preferences
+      const response = await userServices.getCompatibleUsers();
+      let compatibleUsers = response.users || [];
+
+      // Apply manual filters on top of compatible results
+      if (activeFilters.interests.length > 0) {
+        const interestSet = new Set(activeFilters.interests);
+        compatibleUsers = compatibleUsers.filter(u =>
+          u.interests.some(i => interestSet.has(i))
+        );
+      }
+      if (activeFilters.career) {
+        compatibleUsers = compatibleUsers.filter(u =>
+          u.careerName?.toLowerCase() === activeFilters.career.toLowerCase()
+        );
+      }
+      if (activeFilters.minAge) {
+        const minDate = new Date();
+        minDate.setFullYear(minDate.getFullYear() - parseInt(activeFilters.minAge));
+        compatibleUsers = compatibleUsers.filter(u =>
+          new Date(u.birthDate) <= minDate
+        );
+      }
+      if (activeFilters.maxAge) {
+        const maxDate = new Date();
+        maxDate.setFullYear(maxDate.getFullYear() - parseInt(activeFilters.maxAge) - 1);
+        compatibleUsers = compatibleUsers.filter(u =>
+          new Date(u.birthDate) >= maxDate
+        );
+      }
+
+      setUsers(compatibleUsers);
       setCurrentIndex(0);
     } catch {
       setStatusMsg('Error al cargar usuarios');

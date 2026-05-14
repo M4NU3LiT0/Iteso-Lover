@@ -96,10 +96,10 @@ exports.createDateRequest = async (req, res, next) => {
       dateRequest
     });
   } catch (error) {
-    console.error('❌ Create date request error:', error.message);
+    console.error('Create date request error:', error.message);
     res.status(500).json({
       success: false,
-      message: 'Error creating date request: ' + error.message
+      message: 'Error creating date request'
     });
   }
 };
@@ -124,7 +124,7 @@ exports.getPendingRequests = async (req, res, next) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error fetching requests: ' + error.message
+      message: 'Error fetching requests'
     });
   }
 };
@@ -184,7 +184,7 @@ exports.acceptDateRequest = async (req, res, next) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error accepting request: ' + error.message
+      message: 'Error accepting request'
     });
   }
 };
@@ -244,7 +244,7 @@ exports.rejectDateRequest = async (req, res, next) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error rejecting request: ' + error.message
+      message: 'Error rejecting request'
     });
   }
 };
@@ -272,7 +272,7 @@ exports.getScheduledDates = async (req, res, next) => {
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Error fetching scheduled dates: ' + error.message
+      message: 'Error fetching scheduled dates'
     });
   }
 };
@@ -326,6 +326,6 @@ exports.cancelDate = async (req, res, next) => {
 
     res.status(200).json({ success: true, message: 'Cita cancelada correctamente' });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Error al cancelar la cita: ' + error.message });
+    res.status(500).json({ success: false, message: 'Error al cancelar la cita' });
   }
 };

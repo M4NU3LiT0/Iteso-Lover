@@ -43,6 +43,8 @@ const Register = () => {
       if (response.success) {
         setAuth(response.user);
         navigate('/dashboard');
+      } else {
+        setError(response.message || 'Error al registrarse');
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Error al registrarse');

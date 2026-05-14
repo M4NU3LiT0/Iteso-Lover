@@ -40,6 +40,8 @@ coverage/
 *.pem
 .cache/
 .env.*.local
+SKILL.md
+AGENTS.md
 
 # Uploads
 uploads/

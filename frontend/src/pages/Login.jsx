@@ -28,10 +28,12 @@ const Login = () => {
 
     try {
       const response = await authServices.login(formData.email, formData.password);
-      
+
       if (response.success) {
         setAuth(response.user);
         navigate('/dashboard');
+      } else {
+        setError(response.message || 'Error al iniciar sesión');
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Error al iniciar sesión');

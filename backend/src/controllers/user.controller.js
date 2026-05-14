@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const DateRequest = require('../models/DateRequest');
 const { calculateCompatibility } = require('../utils/compatibility');
 
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -55,7 +56,14 @@ exports.searchUsers = async (req, res) => {
     const currentUser = await User.findById(req.user._id).select('interests preferences blockedUsers gender');
     const blockedIds = currentUser.blockedUsers || [];
 
-    let filter = { _id: { $ne: req.user._id, $nin: blockedIds }, isActive: true };
+    // Get users already sent requests to (pending or accepted)
+    const sentRequests = await DateRequest.find({
+      requester: req.user._id,
+      status: { $in: ['pending', 'accepted'] }
+    }).select('receiver');
+    const sentToIds = sentRequests.map(req => req.receiver.toString());
+
+    let filter = { _id: { $ne: req.user._id, $nin: [...blockedIds, ...sentToIds] }, isActive: true };
 
     if (q) {
       const safe = escapeRegex(String(q).slice(0, 50));
@@ -123,6 +131,13 @@ exports.getCompatibleUsers = async (req, res) => {
 
     const blockedIds = currentUser.blockedUsers || [];
 
+    // Get users already sent requests to (pending or accepted)
+    const sentRequests = await DateRequest.find({
+      requester: req.user._id,
+      status: { $in: ['pending', 'accepted'] }
+    }).select('receiver');
+    const sentToIds = sentRequests.map(req => req.receiver.toString());
+
     // Apply preference filter if set
     const prefFilter =
       currentUser.preferences?.interestedIn && currentUser.preferences.interestedIn !== 'all'
@@ -130,7 +145,7 @@ exports.getCompatibleUsers = async (req, res) => {
         : {};
 
     const candidates = await User.find({
-      _id: { $ne: req.user._id, $nin: blockedIds },
+      _id: { $ne: req.user._id, $nin: [...blockedIds, ...sentToIds] },
       isActive: true,
       ...prefFilter
     })

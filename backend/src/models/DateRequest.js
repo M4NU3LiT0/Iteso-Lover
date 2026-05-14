@@ -30,7 +30,7 @@ const dateRequestSchema = new mongoose.Schema(
     location: {
       type: String,
       required: [true, 'Location is required'],
-      enum: ['Library', 'Cafeteria', 'Sports Complex', 'Plaza Mayor', 'Other'],
+      enum: ['Biblioteca', 'Cafetería', 'Complejo Deportivo', 'Plaza Mayor', 'Jardines', 'Auditorio', 'Centro de Lenguas', 'Área de Descanso', 'Otro'],
     },
     customLocation: {
       type: String,

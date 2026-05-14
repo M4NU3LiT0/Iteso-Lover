@@ -47,7 +47,7 @@ io.use((socket, next) => {
     // Browser sends cookies automatically on WS upgrade when withCredentials is true
     const cookieHeader = socket.handshake.headers.cookie || '';
     const tokenMatch = cookieHeader.match(/(?:^|;\s*)access_token=([^;]+)/);
-    const token = tokenMatch ? tokenMatch[1] : socket.handshake.auth?.token; // fallback for dev
+    const token = tokenMatch ? tokenMatch[1] : null;
 
     if (!token) return next(new Error('Authentication error: no token'));
 
@@ -55,7 +55,7 @@ io.use((socket, next) => {
     socket.userId = decoded.id;
     next();
   } catch (err) {
-    next(new Error(`Authentication error: ${err.message}`));
+    next(new Error('Authentication failed'));
   }
 });
 

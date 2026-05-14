@@ -1,18 +1,27 @@
-const AWS = require('aws-sdk');
+const { S3Client, DeleteObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
 const Photo = require('../models/Photo');
 const { logSecurityEvent } = require('../utils/auditLogger');
 
 const MAX_PHOTOS_PER_USER = 6;
 
-const s3 = new AWS.S3({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_S3_REGION
+const validRegions = ['us-east-1', 'us-west-2', 'eu-west-1', 'ap-southeast-1', 'ap-southeast-2'];
+const region = process.env.AWS_S3_REGION;
+
+if (!region || !validRegions.includes(region)) {
+  throw new Error(`Invalid or missing AWS region: ${region}. Must be one of: ${validRegions.join(', ')}`);
+}
+
+const s3 = new S3Client({
+  region,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+  }
 });
 
 const deleteS3Key = async (key) => {
   try {
-    await s3.deleteObject({ Bucket: process.env.AWS_S3_BUCKET_NAME, Key: key }).promise();
+    await s3.send(new DeleteObjectCommand({ Bucket: process.env.AWS_S3_BUCKET_NAME, Key: key }));
   } catch (err) {
     console.error('S3 delete error:', err.message);
   }
@@ -35,16 +44,16 @@ exports.uploadPhoto = async (req, res) => {
     }
 
     const key = `gallery-photos/${userId}/${Date.now()}-${req.file.originalname}`;
-    const result = await s3
-      .upload({
-        Bucket: process.env.AWS_S3_BUCKET_NAME,
-        Key: key,
-        Body: req.file.buffer,
-        ContentType: req.file.mimetype
-      })
-      .promise();
+    const command = new PutObjectCommand({
+      Bucket: process.env.AWS_S3_BUCKET_NAME,
+      Key: key,
+      Body: req.file.buffer,
+      ContentType: req.file.mimetype
+    });
+    await s3.send(command);
 
-    const photo = await Photo.create({ user: userId, url: result.Location, s3Key: key, order: count });
+    const url = `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${region}.amazonaws.com/${key}`;
+    const photo = await Photo.create({ user: userId, url, s3Key: key, order: count });
 
     await logSecurityEvent('profile_photo_uploaded', req, { userId, photoId: photo._id }, 'info');
 
@@ -59,16 +68,6 @@ exports.uploadPhoto = async (req, res) => {
 exports.getMyPhotos = async (req, res) => {
   try {
     const photos = await Photo.find({ user: req.user.id }).sort({ order: 1 });
-    return res.status(200).json({ success: true, photos });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: 'Error fetching photos' });
-  }
-};
-
-// GET /api/users/:id/photos — another user's gallery (public)
-exports.getUserPhotos = async (req, res) => {
-  try {
-    const photos = await Photo.find({ user: req.params.id }).sort({ order: 1 });
     return res.status(200).json({ success: true, photos });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Error fetching photos' });
