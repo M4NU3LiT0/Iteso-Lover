@@ -67,6 +67,7 @@ app.use(cookieParser());
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
+  skip: () => process.env.NODE_ENV === 'test',
   message: { success: false, message: 'Too many requests, please try again later.' }
 });
 app.use('/api/', limiter);
@@ -74,6 +75,7 @@ app.use('/api/', limiter);
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
+  skip: () => process.env.NODE_ENV === 'test',
   message: { success: false, message: 'Too many login attempts, please try again later.' }
 });
 

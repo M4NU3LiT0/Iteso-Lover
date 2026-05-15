@@ -24,7 +24,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ matrix.workspace }}
-        run: npm ci
+        run: npm install
 
       - name: Audit dependencies
         working-directory: ${{ matrix.workspace }}
@@ -81,7 +81,7 @@ jobs:
           image-ref: iteso-lover-backend:test
           format: table
           exit-code: '1'
-          severity: CRITICAL, HIGH
+          severity: 'CRITICAL,HIGH'
           ignore-unfixed: true
 
   # ── 5. Backend unit tests ─────────────────────────────────────────────────
@@ -108,7 +108,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: backend
-        run: npm ci
+        run: npm install
 
       - name: Run tests
         working-directory: backend
@@ -119,3 +119,6 @@ jobs:
           JWT_REFRESH_SECRET: test_refresh_secret_for_ci_only
           MONGODB_URI: mongodb://localhost:27017/iteso-lover-test
           FRONTEND_URL: http://localhost:3000
+          AWS_S3_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: test_access_key
+          AWS_SECRET_ACCESS_KEY: test_secret_key

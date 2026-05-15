@@ -34,7 +34,7 @@ exports.updateProfile = async (req, res) => {
     };
 
     const user = await User.findByIdAndUpdate(req.user._id, allowedUpdates, {
-      new: true,
+      returnDocument: 'after',
       runValidators: true
     });
 
